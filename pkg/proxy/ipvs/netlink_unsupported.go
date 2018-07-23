@@ -53,6 +53,6 @@ func (h *emptyHandle) DeleteDummyDevice(devName string) error {
 }
 
 // GetLocalAddresses is part of interface.
-func (h *emptyHandle) GetLocalAddresses(filterDev string) (sets.String, error) {
+func (h *emptyHandle) GetLocalAddresses(dev, filterDev string) (sets.String, error) {
 	return nil, fmt.Errorf("netlink is not supported in this platform")
 }
