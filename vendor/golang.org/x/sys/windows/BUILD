@@ -2,12 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "go_default_library",
-    srcs = [
-        "mksyscall.go",
-    ] + select({
+    srcs = select({
         "@io_bazel_rules_go//go/platform:windows": [
+            "aliases.go",
             "dll_windows.go",
-            "env_unset.go",
             "env_windows.go",
             "eventlog.go",
             "exec_windows.go",
@@ -19,6 +17,8 @@ go_library(
             "syscall.go",
             "syscall_windows.go",
             "types_windows.go",
+            "zerrors_windows.go",
+            "zknownfolderids_windows.go",
             "zsyscall_windows.go",
         ],
         "//conditions:default": [],
