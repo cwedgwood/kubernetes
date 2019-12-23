@@ -301,6 +301,9 @@ func NewProxier(ipt utiliptables.Interface,
 	syncPeriod time.Duration,
 	minSyncPeriod time.Duration,
 	excludeCIDRs []string,
+	tcpTimeout time.Duration,
+	tcpFinTimeout time.Duration,
+	udpTimeout time.Duration,
 	masqueradeAll bool,
 	masqueradeBit int,
 	clusterCIDR string,
@@ -338,6 +341,15 @@ func NewProxier(ipt utiliptables.Interface,
 	// Set the ip_forward sysctl we need for
 	if err := sysctl.SetSysctl(sysctlForward, 1); err != nil {
 		return nil, fmt.Errorf("can't set sysctl %s: %v", sysctlForward, err)
+	}
+
+	// Configure IPVS timeouts if any one of the timeout parameters have been set.
+	// This is the equivalent to running ipvsadm --set, a value of 0 indicates the
+	// current system timeout should be preserved
+	if tcpTimeout > 0 || tcpFinTimeout > 0 || udpTimeout > 0 {
+		if err := ipvs.ConfigureTimeouts(tcpTimeout, tcpFinTimeout, udpTimeout); err != nil {
+			glog.Warningf("failed to configure IPVS timeouts: %v", err)
+		}
 	}
 
 	// Generate the masquerade mark to use for SNAT rules.
