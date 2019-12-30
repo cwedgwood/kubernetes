@@ -52,3 +52,10 @@ ADD rsyncd.password /
 RUN chmod a+r /rsyncd.password
 ADD rsyncd.sh /
 RUN chmod a+rx /rsyncd.sh
+
+# Download and symlink etcd. We need this for our integration tests.
+RUN export ETCD_VERSION=v3.3.10; \
+  mkdir -p /usr/local/src/etcd \
+  && cd /usr/local/src/etcd \
+  && curl -fsSL https://github.com/coreos/etcd/releases/download/${ETCD_VERSION}/etcd-${ETCD_VERSION}-linux-amd64.tar.gz | tar -xz \
+  && ln -sf ../src/etcd/etcd-${ETCD_VERSION}-linux-amd64/etcd /usr/local/bin/
