@@ -1311,31 +1311,3 @@ func TestComputePodActionsWithSidecar(t *testing.T) {
 		verifyActions(t, &test.actions, &actions, desc)
 	}
 }
-
-func makeBasePodAndStatusWithInitAndEphemeralContainers() (*v1.Pod, *kubecontainer.PodStatus) {
-	pod, status := makeBasePodAndStatus()
-	pod.Spec.InitContainers = []v1.Container{
-		{
-			Name:  "init1",
-			Image: "bar-image",
-		},
-	}
-	pod.Spec.EphemeralContainers = []v1.EphemeralContainer{
-		{
-			EphemeralContainerCommon: v1.EphemeralContainerCommon{
-				Name:  "debug",
-				Image: "busybox",
-			},
-		},
-	}
-	status.ContainerStatuses = append(status.ContainerStatuses, &kubecontainer.ContainerStatus{
-		ID:   kubecontainer.ContainerID{ID: "initid1"},
-		Name: "init1", State: kubecontainer.ContainerStateExited,
-		Hash: kubecontainer.HashContainer(&pod.Spec.InitContainers[0]),
-	}, &kubecontainer.ContainerStatus{
-		ID:   kubecontainer.ContainerID{ID: "debug1"},
-		Name: "debug", State: kubecontainer.ContainerStateRunning,
-		Hash: kubecontainer.HashContainer((*v1.Container)(&pod.Spec.EphemeralContainers[0].EphemeralContainerCommon)),
-	})
-	return pod, status
-}
