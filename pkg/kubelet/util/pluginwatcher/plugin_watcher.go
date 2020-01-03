@@ -168,7 +168,7 @@ func (w *Watcher) Stop() error {
 
 	select {
 	case <-c:
-	case <-time.After(11 * time.Second):
+	case <-time.After(60 * time.Second):
 		return fmt.Errorf("timeout on stopping watcher")
 	}
 
