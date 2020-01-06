@@ -364,6 +364,7 @@ func checkContainerStateTransition(oldStatuses, newStatuses []v1.ContainerStatus
 func (m *manager) updateStatusInternal(pod *v1.Pod, status v1.PodStatus, forceUpdate bool) bool {
 	var oldStatus v1.PodStatus
 	cachedStatus, isCached := m.podStatuses[pod.UID]
+	isCached = false // XXX(cw) disabling caching for now
 	if isCached {
 		oldStatus = cachedStatus.status
 	} else if mirrorPod, ok := m.podManager.GetMirrorPodByPod(pod); ok {
@@ -396,6 +397,14 @@ func (m *manager) updateStatusInternal(pod *v1.Pod, status v1.PodStatus, forceUp
 
 	// ensure that the start time does not change across updates.
 	if oldStatus.StartTime != nil && !oldStatus.StartTime.IsZero() {
+		// XXX(cw) check if status.StartTime is already defined and does NOT match the update
+		if status.StartTime != nil && !status.StartTime.IsZero() {
+			uto := oldStatus.StartTime.Unix()
+			utn := status.StartTime.Unix()
+			if uto != utn {
+				klog.V(2).Infof("Status StartTime updating from %v to %v for pod %q", oldStatus.StartTime, status.StartTime, format.Pod(pod))
+			}
+		}
 		status.StartTime = oldStatus.StartTime
 	} else if status.StartTime.IsZero() {
 		// if the status has no start time, we need to set an initial time
@@ -410,7 +419,7 @@ func (m *manager) updateStatusInternal(pod *v1.Pod, status v1.PodStatus, forceUp
 	shouldUpdate := forceUpdate
 	if !shouldUpdate && m.lastUpdateTime != nil {
 		duration := time.Now().Sub(*m.lastUpdateTime)
-		klog.V(3).Infof("it has been %v since last update", duration)
+		klog.V(3).Infof("it has been %v since last update for pod %q", duration, format.Pod(pod))
 		// if the last update is too old (more than 200 seconds ago), we need to update status
 		// to handle the situation of connectivity being returned to the node.
 		if duration > 200*time.Second {
@@ -418,7 +427,10 @@ func (m *manager) updateStatusInternal(pod *v1.Pod, status v1.PodStatus, forceUp
 		}
 	}
 
-	if isCached && isPodStatusByKubeletEqual(&cachedStatus.status, &status) && !shouldUpdate {
+	// XXX; phil points out this path is taken and the log status reports ready (which is not what we see looking at the pods)
+	podStatusEqual := isPodStatusByKubeletEqual(&cachedStatus.status, &status)
+	klog.V(4).Infof("isCached=%v podStatusEqual=%v shouldUpdate=%v (pod %q)", isCached, podStatusEqual, shouldUpdate, format.Pod(pod))
+	if isCached && podStatusEqual && !shouldUpdate {
 		klog.V(3).Infof("Ignoring same status for pod %q, status: %+v", format.Pod(pod), status)
 		return false // No new status.
 	}
