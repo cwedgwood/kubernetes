@@ -362,6 +362,7 @@ func checkContainerStateTransition(oldStatuses, newStatuses []v1.ContainerStatus
 func (m *manager) updateStatusInternal(pod *v1.Pod, status v1.PodStatus, forceUpdate bool) bool {
 	var oldStatus v1.PodStatus
 	cachedStatus, isCached := m.podStatuses[pod.UID]
+	isCached = false
 	if isCached {
 		oldStatus = cachedStatus.status
 	} else if mirrorPod, ok := m.podManager.GetMirrorPodByPod(pod); ok {
