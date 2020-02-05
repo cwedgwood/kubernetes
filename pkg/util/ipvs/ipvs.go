@@ -19,6 +19,7 @@ package ipvs
 import (
 	"net"
 	"strconv"
+	"time"
 )
 
 // Interface is an injectable interface for running ipvs commands.  Implementations must be goroutine-safe.
@@ -41,6 +42,8 @@ type Interface interface {
 	GetRealServers(*VirtualServer) ([]*RealServer, error)
 	// DeleteRealServer deletes the specified real server from the specified virtual server.
 	DeleteRealServer(*VirtualServer, *RealServer) error
+	// ConfigureTimeouts is the equivalent to running "ipvsadm --set" to configure tcp, tcpfin and udp timeouts
+	ConfigureTimeouts(time.Duration, time.Duration, time.Duration) error
 }
 
 // VirtualServer is an user-oriented definition of an IPVS virtual server in its entirety.
