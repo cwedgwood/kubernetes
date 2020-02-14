@@ -230,6 +230,7 @@ type Proxier struct {
 // IPGetter helps get node network interface IP
 type IPGetter interface {
 	NodeIPs() ([]net.IP, error)
+	BoundIPs() (sets.String, error)
 }
 
 // realIPGetter is a real NodeIP handler, it implements IPGetter.
@@ -263,6 +264,10 @@ func (r *realIPGetter) NodeIPs() (ips []net.IP, err error) {
 		ips = append(ips, net.ParseIP(ipStr))
 	}
 	return ips, nil
+}
+
+func (r *realIPGetter) BoundIPs() (sets.String, error) {
+	return r.nl.GetLocalAddresses(DefaultDummyDevice, "")
 }
 
 // Proxier implements ProxyProvider
@@ -779,6 +784,12 @@ func (proxier *Proxier) syncProxyRules() {
 		}
 	}
 
+	// List all addresses bound to dummy device only once
+	boundAddresses, err := proxier.ipGetter.BoundIPs()
+	if err != nil {
+		glog.Errorf("error listing addresses bound to dummy interface, error: %v", err)
+	}
+
 	// Build IPVS rules for each service.
 	for svcName, svc := range proxier.serviceMap {
 		svcInfo, ok := svc.(*serviceInfo)
@@ -846,7 +857,7 @@ func (proxier *Proxier) syncProxyRules() {
 			serv.Timeout = uint32(svcInfo.StickyMaxAgeSeconds)
 		}
 		// We need to bind ClusterIP to dummy interface, so set `bindAddr` parameter to `true` in syncService()
-		if err := proxier.syncService(svcNameString, serv, true); err == nil {
+		if err := proxier.syncService(svcNameString, serv, true, boundAddresses); err == nil {
 			activeIPVSServices[serv.String()] = true
 			// ExternalTrafficPolicy only works for NodePort and external LB traffic, does not affect ClusterIP
 			// So we still need clusterIP rules in onlyNodeLocalEndpoints mode.
@@ -915,7 +926,7 @@ func (proxier *Proxier) syncProxyRules() {
 				serv.Flags |= utilipvs.FlagPersistent
 				serv.Timeout = uint32(svcInfo.StickyMaxAgeSeconds)
 			}
-			if err := proxier.syncService(svcNameString, serv, true); err == nil {
+			if err := proxier.syncService(svcNameString, serv, true, boundAddresses); err == nil {
 				activeIPVSServices[serv.String()] = true
 				if err := proxier.syncEndpoint(svcName, false, serv); err != nil {
 					glog.Errorf("Failed to sync endpoint for service: %v, err: %v", serv, err)
@@ -1015,7 +1026,7 @@ func (proxier *Proxier) syncProxyRules() {
 					serv.Flags |= utilipvs.FlagPersistent
 					serv.Timeout = uint32(svcInfo.StickyMaxAgeSeconds)
 				}
-				if err := proxier.syncService(svcNameString, serv, true); err == nil {
+				if err := proxier.syncService(svcNameString, serv, true, boundAddresses); err == nil {
 					// check if service need skip endpoints that not in same host as kube-proxy
 					onlyLocal := svcInfo.SessionAffinityType == api.ServiceAffinityClientIP && svcInfo.OnlyNodeLocalEndpoints
 					activeIPVSServices[serv.String()] = true
@@ -1133,7 +1144,7 @@ func (proxier *Proxier) syncProxyRules() {
 					serv.Timeout = uint32(svcInfo.StickyMaxAgeSeconds)
 				}
 				// There is no need to bind Node IP to dummy interface, so set parameter `bindAddr` to `false`.
-				if err := proxier.syncService(svcNameString, serv, false); err == nil {
+				if err := proxier.syncService(svcNameString, serv, false, boundAddresses); err == nil {
 					activeIPVSServices[serv.String()] = true
 					if err := proxier.syncEndpoint(svcName, false, serv); err != nil {
 						glog.Errorf("Failed to sync endpoint for service: %v, err: %v", serv, err)
@@ -1481,7 +1492,7 @@ func (proxier *Proxier) deleteEndpointConnections(connectionMap []proxy.ServiceE
 	}
 }
 
-func (proxier *Proxier) syncService(svcName string, vs *utilipvs.VirtualServer, bindAddr bool) error {
+func (proxier *Proxier) syncService(svcName string, vs *utilipvs.VirtualServer, bindAddr bool, boundAddresses sets.String) error {
 	appliedVirtualServer, _ := proxier.ipvs.GetVirtualServer(vs)
 	if appliedVirtualServer == nil || !appliedVirtualServer.Equal(vs) {
 		if appliedVirtualServer == nil {
@@ -1502,9 +1513,8 @@ func (proxier *Proxier) syncService(svcName string, vs *utilipvs.VirtualServer, 
 		}
 	}
 
-	// bind service address to dummy interface even if service not changed,
-	// in case that service IP was removed by other processes
-	if bindAddr {
+	// bind service address to dummy interface if it's not in the set of bound addresses
+	if bindAddr && !boundAddresses.Has(vs.Address.String()) {
 		_, err := proxier.netlinkHandle.EnsureAddressBind(vs.Address.String(), DefaultDummyDevice)
 		if err != nil {
 			glog.Errorf("Failed to bind service address to dummy device %q: %v", svcName, err)
