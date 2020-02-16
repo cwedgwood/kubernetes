@@ -78,8 +78,6 @@ func IsProbableEOF(err error) bool {
 		return true
 	case strings.Contains(msg, "connection reset by peer"):
 		return true
-	case strings.Contains(strings.ToLower(msg), "use of closed network connection"):
-		return true
 	}
 	return false
 }
